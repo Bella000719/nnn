@@ -5,36 +5,80 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Podcast Player</title>
     <style>
-        body { font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px; }
-        .player { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); }
-        .controls { display: flex; justify-content: center; align-items: center; }
-        button { margin: 0 10px; padding: 10px 15px; font-size: 18px; border: none; border-radius: 5px; background: #007BFF; color: white; cursor: pointer; }
-        button:hover { background: #0056b3; }
-        .waveform { height: 100px; background: #ddd; margin: 20px 0; border-radius: 5px; }
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+        }
+        #player {
+            margin-top: 20px;
+            width: 80%;
+            text-align: center;
+        }
+        #equalizer {
+            width: 100%;
+            height: 50px;
+            background: linear-gradient(90deg, #ddd 10%, #444 10%, #444 20%, #ddd 20%, #ddd 30%, #444 30%, #444 40%, #ddd 40%, #ddd 50%, #444 50%);
+            background-size: 20px 100%;
+            animation: move 1s linear infinite;
+        }
+        @keyframes move {
+            from { background-position: 0; }
+            to { background-position: 50%; }
+        }
     </style>
 </head>
 <body>
-    <div class="player">
-        <h1>Podcast Player</h1>
-        <div class="waveform" id="waveform"></div>
-        <div class="controls">
-            <button id="backward">&#9664;&#9664;</button>
+    <div id="player">
+        <audio id="audio" controls preload="metadata">
+            <source src="podcast.mp3" type="audio/mpeg">
+            Your browser does not support the audio element.
+        </audio>
+        <div id="equalizer"></div>
+        <div>
             <button id="play">Play</button>
             <button id="pause">Pause</button>
-            <button id="forward">&#9654;&#9654;</button>
+            <button id="skip">Skip</button>
+            <label for="speed">Speed:</label>
+            <input type="range" id="speed" min="0.33" max="3" step="0.01" value="1">
+            <label for="volume">Volume:</label>
+            <input type="range" id="volume" min="0" max="1" step="0.01" value="1">
         </div>
     </div>
+
     <script>
+        const audio = document.getElementById('audio');
         const playButton = document.getElementById('play');
         const pauseButton = document.getElementById('pause');
-        const forwardButton = document.getElementById('forward');
-        const backwardButton = document.getElementById('backward');
+        const skipButton = document.getElementById('skip');
+        const speedControl = document.getElementById('speed');
+        const volumeControl = document.getElementById('volume');
 
-        // This is where you would implement the audio playback logic.
-        playButton.addEventListener('click', () => { console.log('Playing'); });
-        pauseButton.addEventListener('click', () => { console.log('Paused'); });
-        forwardButton.addEventListener('click', () => { console.log('Skipped Forward'); });
-        backwardButton.addEventListener('click', () => { console.log('Skipped Backward'); });
+        playButton.addEventListener('click', () => audio.play());
+        pauseButton.addEventListener('click', () => audio.pause());
+        skipButton.addEventListener('click', () => audio.currentTime += 10);
+
+        speedControl.addEventListener('input', () => {
+            audio.playbackRate = speedControl.value;
+        });
+
+        volumeControl.addEventListener('input', () => {
+            audio.volume = volumeControl.value;
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'ArrowRight') {
+                audio.currentTime += 10;
+            } else if (event.key === 'ArrowLeft') {
+                audio.currentTime -= 10;
+            } else if (event.key === 'ArrowUp') {
+                audio.playbackRate = Math.min(3, audio.playbackRate + 0.1);
+            } else if (event.key === 'ArrowDown') {
+                audio.playbackRate = Math.max(0.33, audio.playbackRate - 0.1);
+            }
+        });
     </script>
 </body>
 </html>

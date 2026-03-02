@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Podcast Player</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f4f4f4;
+            font-family: Arial, sans-serif;
+        }
+        .player {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            text-align: center;
+        }
+        .waveform {
+            width: 100%;
+            height: 100px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+        }
+        .play-button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="player">
+        <h1>Podcast Player</h1>
+        <div class="waveform" id="waveform"></div>
+        <button class="play-button" id="playButton">Play</button>
+    </div>
+
+    <audio id="audio" src="podcast.mp4"></audio>
+
+    <script>
+        const audio = document.getElementById('audio');
+        const playButton = document.getElementById('playButton');
+        const waveform = document.getElementById('waveform');
+
+        playButton.addEventListener('click', () => {
+            if (audio.paused) {
+                audio.play();
+                playButton.textContent = 'Pause';
+                // Placeholder for waveform visualizer
+                visualize();
+            } else {
+                audio.pause();
+                playButton.textContent = 'Play';
+            }
+        });
+
+        function visualize() {
+            // Simple placeholder for the visualizer logic
+            const amplitude = Math.random();
+            waveform.style.height = amplitude * 100 + 'px';
+            setTimeout(visualize, 500);
+        }
+    </script>
+</body>
+</html>

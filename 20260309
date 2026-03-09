@@ -1,126 +1,241 @@
-import time
-
-class NeonReversedPlayer:
-    def __init__(self):
-        # --- 狀態變數 ---
-        self.playback_speed = 0.0      # 當前播放速度 (0.0 = 停止)
-        self.current_position = 0.0    # 歌曲當前時間秒數
-        self.target_volume_step = 3    # 當前音量檔位 (1-5)
-        self.actual_volume_db = -12.0  # 真正的硬體音量 (dB)
-
-        # --- 離散音量對照表 ---
-        # 定義 5 個絕對、離散的音量檔位
-        self.volume_steps = {
-            1: -30.0, # 極小聲
-            2: -20.0,
-            3: -12.0, # 中等 (初始)
-            4: -6.0,
-            5: 0.0    # 最大聲
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>Cyber-Reverse Neon Player</title>
+    <style>
+        :root {
+            --neon-red: #ff003c;
+            --neon-glow: rgba(255, 0, 60, 0.7);
+            --dark-bg: #050505;
         }
 
-    # ============================================================
-    # 邏輯反轉 1：連續輸入 $\rightarrow$ 連續輸出 (播音/停止)
-    # 原本：按一下播放（離散）
-    # 現在：旋鈕轉動（連續），角度決定速度
-    # ============================================================
-    def handle_status_knob(self, angle):
-        """
-        接收旋鈕角度 (0 到 180 度)。
-        0度 = 停止，180度 = 1倍速播放。
-        """
-        # 建立一個連續的映射曲線 (Linear Mapping)
-        if angle <= 5: # 設定一個微小的死區 (Deadzone)，防止噪訊觸發
-            self.playback_speed = 0.0
-            new_status = "STOP"
-        else:
-            # 角度越高，播放速度越快 (這產生了連續的播放狀態)
-            self.playback_speed = angle / 180.0 
-            new_status = f"PLAYING at {self.playback_speed:.2f}x"
-        
-        self.update_neon_status_display(angle, new_status)
-        self.apply_playback_speed_to_hardware(self.playback_speed)
+        body {
+            background-color: var(--dark-bg);
+            color: #fff;
+            font-family: 'Segoe UI', 'Courier New', monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
 
-    # ============================================================
-    # 邏輯反轉 2：連續輸入 $\rightarrow$ 連續輸出 (快轉)
-    # 原本：按一下快轉10秒（離散）
-    # 現在：旋鈕轉動速度（連續），轉越快，跳越多
-    # ============================================================
-    def handle_seek_knob(self, angular_velocity):
-        """
-        接收旋鈕旋轉速度 (RPM, 正值為快轉，負值為倒帶)。
-        這是連續的物理量。
-        """
-        if abs(angular_velocity) < 10: # 死區
-            return
+        .player-card {
+            background: #111;
+            padding: 3rem;
+            border-radius: 20px;
+            border: 1px solid #333;
+            box-shadow: 0 0 50px rgba(0,0,0,1);
+            text-align: center;
+            width: 450px;
+        }
 
-        # 旋轉速度越快，跳躍的距離越長（連續變化）
-        # 例如：jump_seconds = RPM * 0.1
-        jump_seconds = angular_velocity * 0.1
-        
-        self.current_position += jump_seconds
-        
-        # 確保不會跳出歌曲範圍
-        self.current_position = max(0, min(self.current_position, self.song_length))
-        
-        self.update_neon_seek_display(angular_velocity)
-        self.apply_position_to_hardware(self.current_position)
+        h1 {
+            color: var(--neon-red);
+            text-shadow: 0 0 10px var(--neon-red);
+            letter-spacing: 3px;
+            margin-bottom: 2rem;
+            font-size: 1.5rem;
+        }
 
-    # ============================================================
-    # 邏輯反轉 3：離散輸入 $\rightarrow$ 離散輸出 (音量)
-    # 原本：旋鈕平滑調整（連續）
-    # 現在：點擊獨立按鈕（離散），直接跳躍到該檔位
-    # ============================================================
-    def handle_volume_button(self, button_number):
-        """
-        接收按鍵編號 (1 到 5)。
-        """
-        if button_number in self.volume_steps:
-            self.target_volume_step = button_number
-            self.actual_volume_db = self.volume_steps[button_number]
+        /* 連續控制區：旋鈕 */
+        .knob-container {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 3rem;
+        }
+
+        .knob-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .neon-knob {
+            width: 120px;
+            height: 120px;
+            border: 4px solid var(--neon-red);
+            border-radius: 50%;
+            position: relative;
+            cursor: grab;
+            box-shadow: 0 0 15px var(--neon-red), inset 0 0 15px var(--neon-red);
+            transition: box-shadow 0.2s;
+        }
+
+        .neon-knob::after {
+            content: '';
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            width: 4px;
+            height: 25px;
+            background: var(--neon-red);
+            box-shadow: 0 0 8px var(--neon-red);
+            transform: translateX(-50%);
+        }
+
+        .label {
+            font-size: 0.7rem;
+            color: #888;
+            text-transform: uppercase;
+        }
+
+        /* 離散控制區：音量方塊 */
+        .discrete-section {
+            border-top: 1px solid #333;
+            padding-top: 2rem;
+        }
+
+        .volume-grid {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .vol-step {
+            width: 50px;
+            height: 40px;
+            border: 2px solid #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-weight: bold;
+            color: #444;
+            transition: all 0.05s; /* 縮短過渡，強化離散感 */
+        }
+
+        .vol-step.active {
+            color: #fff;
+            border-color: var(--neon-red);
+            background: rgba(255, 0, 60, 0.2);
+            box-shadow: 0 0 20px var(--neon-red);
+            text-shadow: 0 0 5px #fff;
+        }
+
+        #status-text {
+            margin-top: 20px;
+            font-size: 0.9rem;
+            color: var(--neon-red);
+            height: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="player-card">
+    <h1 id="title">LOGIC REVERSAL</h1>
+
+    <div class="knob-container">
+        <div class="knob-wrapper">
+            <div id="status-knob" class="neon-knob"></div>
+            <div class="label">Status (Continuous)</div>
+        </div>
+        <div class="knob-wrapper">
+            <div id="seek-knob" class="neon-knob" style="border-color: #00f3ff; box-shadow: 0 0 15px #00f3ff, inset 0 0 15px #00f3ff;"></div>
+            <div class="label">Seek (Continuous)</div>
+        </div>
+    </div>
+
+    <div class="discrete-section">
+        <div class="label">Volume Steps (Discrete)</div>
+        <div class="volume-grid">
+            <div class="vol-step" data-vol="0.1">1</div>
+            <div class="vol-step" data-vol="0.3">2</div>
+            <div class="vol-step active" data-vol="0.5">3</div>
+            <div class="vol-step" data-vol="0.7">4</div>
+            <div class="vol-step" data-vol="1.0">5</div>
+        </div>
+    </div>
+
+    <div id="status-text">SYSTEM READY</div>
+</div>
+
+<audio id="main-audio" loop>
+    <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg">
+</audio>
+
+<script>
+    const audio = document.getElementById('main-audio');
+    const statusKnob = document.getElementById('status-knob');
+    const seekKnob = document.getElementById('seek-knob');
+    const volSteps = document.querySelectorAll('.vol-step');
+    const statusText = document.getElementById('status-text');
+
+    let isDraggingStatus = false;
+    let isDraggingSeek = false;
+
+    // --- 離散控制：音量 ---
+    // 按下瞬間直接跳轉，不設定淡入淡出
+    volSteps.forEach(step => {
+        step.addEventListener('click', () => {
+            volSteps.forEach(s => s.classList.remove('active'));
+            step.classList.add('active');
             
-            print(f"離散音量切換：檔位 {self.target_volume_step}，音量 {self.actual_volume_db} dB")
-            
-            # --- 視覺：離散的跳躍 ---
-            self.update_neon_volume_grid(self.target_volume_step)
-            
-            # --- 聽覺：絕對、無過渡的跳躍 ---
-            # 這裡我們「故意不」做平滑處理 (Fading)，
-            # 讓聲音直接「爆」或「切」到新的音量，強化離散感。
-            self.apply_volume_to_hardware(self.actual_volume_db)
+            const vol = parseFloat(step.dataset.vol);
+            audio.volume = vol; // 離散輸出
+            statusText.innerText = `VOLUME SET TO: ${vol * 100}%`;
+        });
+    });
 
-    # ============================================================
-    # 霓虹燈視覺硬體對接 (此部分為想像)
-    # ============================================================
-    def update_neon_volume_grid(self, step):
-        # 讓這 5 個霓虹燈格，只有第 `step` 格變得極亮，其他全暗。
-        # 造成強烈的離散狀態切換視覺。
-        pass
+    // --- 連續控制：通用旋轉邏輯 ---
+    function getAngle(event, element) {
+        const rect = element.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const x = (event.clientX || event.touches[0].clientX) - centerX;
+        const y = (event.clientY || event.touches[0].clientY) - centerY;
+        let angle = Math.atan2(y, x) * (180 / Math.PI);
+        return angle + 90; // 修正起始角度
+    }
 
-    def update_neon_status_display(self, angle, status_text):
-        # 讓 STATUS 旋鈕後面的紅色霓虹軌跡隨著角度拉長。
-        pass
+    // 播放狀態旋鈕 (Status)
+    statusKnob.addEventListener('mousedown', () => isDraggingStatus = true);
+    window.addEventListener('mouseup', () => isDraggingStatus = false);
 
-    def apply_playback_speed_to_hardware(self, speed):
-        # 驅動真正的播放引擎調整速度 (例如 0.5x 速會聽起來像低沉的慢板)
-        pass
+    window.addEventListener('mousemove', (e) => {
+        if (!isDraggingStatus) return;
+        
+        const angle = getAngle(e, statusKnob);
+        statusKnob.style.transform = `rotate(${angle}deg)`;
+        
+        // 連續輸出邏輯：角度大於 20 度開始播放，角度越大速度越快 (0.5x ~ 2.0x)
+        if (angle > 20) {
+            const speed = Math.min(2, Math.max(0.5, angle / 100));
+            audio.playbackRate = speed;
+            if (audio.paused) audio.play();
+            statusText.innerText = `PLAYING: ${speed.toFixed(2)}x SPEED`;
+        } else {
+            audio.pause();
+            statusText.innerText = `PAUSED / STOPPED`;
+        }
+    });
 
-# ============================================================
-# 模擬使用者操作
-# ============================================================
-player = NeonReversedPlayer()
-player.song_length = 300 # 假設歌曲 300 秒
+    // 快轉旋鈕 (Seek)
+    seekKnob.addEventListener('mousedown', () => isDraggingSeek = true);
+    window.addEventListener('mouseup', () => isDraggingSeek = false);
 
-print("--- 模擬使用者轉動 STATUS 旋鈕 ---")
-player.handle_status_knob(10)   # 微弱轉動：0.05倍速 (連續)
-time.sleep(1)
-player.handle_status_knob(180)  # 完全轉動：1倍速 (連續)
-time.sleep(1)
-player.handle_status_knob(0)    # 歸零：停止
+    window.addEventListener('mousemove', (e) => {
+        if (!isDraggingSeek) return;
+        
+        const angle = getAngle(e, seekKnob);
+        seekKnob.style.transform = `rotate(${angle}deg)`;
+        
+        // 連續輸出邏輯：旋轉角度直接對應歌曲百分比
+        const percent = (angle % 360) / 360;
+        if (percent >= 0) {
+            audio.currentTime = percent * audio.duration;
+            statusText.innerText = `SEEKING: ${Math.floor(percent * 100)}%`;
+        }
+    });
 
-print("\n--- 模擬使用者「快速」轉動 SEEK 旋鈕 ---")
-player.handle_seek_knob(200)   # 快速快轉 (連續輸入產生連續跳躍)
+    // 初始化音量
+    audio.volume = 0.5;
+</script>
 
-print("\n--- 模擬使用者點擊離散音量按鈕 ---")
-player.handle_volume_button(1)  # 點擊第1檔 (離散)
-time.sleep(1)
-player.handle_volume_button(5)  # 直接跳到第5檔 (離散，聽覺會感到突兀)
+</body>
+</html>
